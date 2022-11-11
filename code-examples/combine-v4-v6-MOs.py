@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 """show how to use the new keys / functionality provided by CoMO
 
@@ -37,7 +37,6 @@ like?) Take a list of MOs that looks like:
 
 and see if the MOs tagged "v6" can be merged into the MO tagged v4 """
 
-from __future__ import print_function
 import json
 import os
 import sys
@@ -48,29 +47,33 @@ from copy import deepcopy
 def get_mos(leader, apikey, certfile, page=1, mos=[]):
     """gather up all of the MOs on the deployment and return them"""
 
-    url = "https://{}/api/sp/managed_objects/?page={}".format(
-        leader, page)
+    url = "https://{}/api/sp/managed_objects/?page={}".format(leader, page)
 
     response = requests.get(
         url,
-        headers={"X-Arbux-APIToken": apikey,
-                 "Content-Type": "application/vnd.json+api"},
-        verify=certfile)
+        headers={
+            "X-Arbux-APIToken": apikey,
+            "Content-Type": "application/vnd.json+api",
+        },
+        verify=certfile,
+    )
 
     if response.status_code is not requests.codes.ok:
-        print("API request for alerts returned {} ({})".format(
-            response.reason, response.status_code),
-            file=sys.stderr)
+        print(
+            "API request for alerts returned {} ({})".format(
+                response.reason, response.status_code
+            ),
+            file=sys.stderr,
+        )
         return None
 
     response = response.json()
 
-    mos = response['data']
+    mos = response["data"]
 
-    if 'next' in response['links']:
-        print ("Getting page {} from the "
-               "managed_objects endpoint".format(page+1))
-        mos += get_mos(leader, apikey, certfile, page+1, mos)
+    if "next" in response["links"]:
+        print("Getting page {} from the " "managed_objects endpoint".format(page + 1))
+        mos += get_mos(leader, apikey, certfile, page + 1, mos)
 
     return mos
 
@@ -98,10 +101,10 @@ The list should look like:
         "v6": "mo2_name_v6"
     }
 ]"""
-        print (msg % (MOS_FILE))
-        print ("Your MOs are:")
+        print(msg % (MOS_FILE))
+        print("Your MOs are:")
         for (t, n) in sorted(type_and_name):
-            print ("{:<15} {}".format(t, n))
+            print("{:<15} {}".format(t, n))
 
         sys.exit(0)
 
@@ -120,16 +123,16 @@ def get_type_and_name(mos):
     """
     type_and_name = []
     for mo in mos:
-        if 'match_type' in mo['attributes']:
-            match_type = mo['attributes']['match_type']
-            if (match_type == 'cidr_blocks' or
-                    match_type == 'cidr_v6_blocks'):
-                type_and_name.append([mo['attributes']['match_type'],
-                                      mo['attributes']['name']])
+        if "match_type" in mo["attributes"]:
+            match_type = mo["attributes"]["match_type"]
+            if match_type == "cidr_blocks" or match_type == "cidr_v6_blocks":
+                type_and_name.append(
+                    [mo["attributes"]["match_type"], mo["attributes"]["name"]]
+                )
 
     num_v6 = 0
     for (t, n) in type_and_name:
-        if t == 'cidr_v6_blocks':
+        if t == "cidr_v6_blocks":
             num_v6 += 1
 
     return type_and_name, num_v6
@@ -137,20 +140,20 @@ def get_type_and_name(mos):
 
 def check_mos(mos, mos_to_check):
     """Make sure the MOs to check from the file actually exist"""
-    mo_names = [mo['attributes']['name'] for mo in mos]
+    mo_names = [mo["attributes"]["name"] for mo in mos]
 
     matched_mos = []
     for mo in mos_to_check:
-        if mo['v4'] in mo_names and mo['v6'] in mo_names:
+        if mo["v4"] in mo_names and mo["v6"] in mo_names:
             matched_mos.append(mo)
         else:
-            print ('<'*70)
-            print ("The following MO will not be evaluated "
-                   "for combining because one ")
-            print ("or both of the MO names is not configured "
-                   "on the SP system.")
-            print (json.dumps(mo, indent=4))
-            print ('>'*70)
+            print("<" * 70)
+            print(
+                "The following MO will not be evaluated " "for combining because one "
+            )
+            print("or both of the MO names is not configured " "on the SP system.")
+            print(json.dumps(mo, indent=4))
+            print(">" * 70)
 
     return matched_mos
 
@@ -159,7 +162,7 @@ def index_mos_by_name(mos):
     """It is useful to have MOs indexed by name, so do that"""
     mos_by_name = {}
     for mo in mos:
-        mos_by_name[mo['attributes']['name']] = mo
+        mos_by_name[mo["attributes"]["name"]] = mo
 
     return mos_by_name
 
@@ -179,19 +182,23 @@ def diff_mos(mos_by_name, mos_to_check):
     results = {}
     for mo_name in mos_to_check:
         # Store results keys by combined MO names
-        key = (mo_name['v4'], mo_name['v6'])
+        key = (mo_name["v4"], mo_name["v6"])
         if key not in results:
             results[key] = []
         # Check for matching family types
-        if (mos_by_name[mo_name['v4']]['attributes']['family'] !=
-                mos_by_name[mo_name['v6']]['attributes']['family']):
+        if (
+            mos_by_name[mo_name["v4"]]["attributes"]["family"]
+            != mos_by_name[mo_name["v6"]]["attributes"]["family"]
+        ):
             results[key].append("Family types do not match")
         # Check for matching shared host detection sets
-        v4_shds = mos_by_name[mo_name['v4']]['relationships'][
-            'shared_host_detection_settings']['data']['id']
-        v6_shds = mos_by_name[mo_name['v6']]['relationships'][
-            'shared_host_detection_settings']['data']['id']
-        if (v4_shds != v6_shds):
+        v4_shds = mos_by_name[mo_name["v4"]]["relationships"][
+            "shared_host_detection_settings"
+        ]["data"]["id"]
+        v6_shds = mos_by_name[mo_name["v6"]]["relationships"][
+            "shared_host_detection_settings"
+        ]["data"]["id"]
+        if v4_shds != v6_shds:
             results[key].append("Shared Host Detection Sets do not match")
         #
         # You will want to add other relevant checks here, to make sure that
@@ -214,55 +221,67 @@ def combine_mos(mov4, mov6):
     augmented to combine things between MOs that you need to make sure
     are needed in a combined managed object
     """
-    mov4['attributes']['match'] += " " + mov6['attributes']['match']
-    mov4['attributes']['name'] = "{} + {}".format(
-        mov4['attributes']['name'],
-        mov6['attributes']['name'])
-    mov4['attributes']['description'] += " ---Combined Managed Object--- "
-    mov4['attributes']['tags'].append("auto-combined")
-    mov4['relationships']['mitigation_templates_manual_ipv6'] = (
-        mov6['relationships']['mitigation_templates_manual_ipv6'])
-    mov4['relationships']['mitigation_templates_auto_ipv6'] = (
-        mov6['relationships']['mitigation_templates_auto_ipv6'])
+    mov4["attributes"]["match"] += " " + mov6["attributes"]["match"]
+    mov4["attributes"]["name"] = "{} + {}".format(
+        mov4["attributes"]["name"], mov6["attributes"]["name"]
+    )
+    mov4["attributes"]["description"] += " ---Combined Managed Object--- "
+    mov4["attributes"]["tags"].append("auto-combined")
+    mov4["relationships"]["mitigation_templates_manual_ipv6"] = mov6["relationships"][
+        "mitigation_templates_manual_ipv6"
+    ]
+    mov4["relationships"]["mitigation_templates_auto_ipv6"] = mov6["relationships"][
+        "mitigation_templates_auto_ipv6"
+    ]
     #
     # You will want to add other relevant combinaitions here, to make sure that
     # your combined managed object makes sense in your network
     #
 
     mo = {}
-    mo['data'] = deepcopy(mov4)
-    mo['data'].pop("links", None)
-    mo['data'].pop("id", None)
+    mo["data"] = deepcopy(mov4)
+    mo["data"].pop("links", None)
+    mo["data"].pop("id", None)
 
     return mo
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
+    #
+    # set the SP leader hostname and API key
+    #
+    if "SP_LEADER" in os.environ:
+        SP_LEADER = os.environ["SP_LEADER"]
+    else:
+        exit('no environment variable "SP_LEADER" found')
 
-    LEADER = os.getenv('SPLEADER')
-    APIKEY = os.getenv('SPAPIKEY')
-    CERTFILE = './certfile'
-    MOS_FILE = 'mos_to_merge.json'
+    # this is assumed to be an admin token
+    if "SP_API_KEY" in os.environ:
+        API_KEY = os.environ["SP_API_KEY"]
+    else:
+        exit('no environment variable "SP_API_KEY" found')
 
-    print("Collecting information on managed "
-          "objects from {}.".format(LEADER))
+    CERTFILE = "./certfile"
+    MOS_FILE = "mos_to_merge.json"
 
-    mos = get_mos(LEADER, APIKEY, CERTFILE)
+    print("Collecting information on managed " "objects from {}.".format(SP_LEADER))
+
+    mos = get_mos(SP_LEADER, API_KEY, CERTFILE)
     if mos is None:
         sys.exit(1)
 
-    print ("There are {} MOs.".format(len(mos)))
+    print("There are {} MOs.".format(len(mos)))
 
     type_and_name, num_v6 = get_type_and_name(mos)
 
     if num_v6 == 0:
-        print ("There aren't any IPv6 matches, so "
-               "there is nothing to combine.")
+        print("There aren't any IPv6 matches, so " "there is nothing to combine.")
         sys.exit(0)
     else:
-        print ("There are {} out of {} MOs with CIDR matches "
-               "that are IPv6 matches.".format(
-                   num_v6, len(type_and_name)))
+        print(
+            "There are {} out of {} MOs with CIDR matches "
+            "that are IPv6 matches.".format(num_v6, len(type_and_name))
+        )
 
     mos_by_name = index_mos_by_name(mos)
 
@@ -274,24 +293,25 @@ if __name__ == '__main__':
 
     uncombinable_mos = [mo for mo in differences if len(differences[mo]) > 0]
     for mo in uncombinable_mos:
-        print ("{}:".format(mo))
+        print("{}:".format(mo))
         for diff in differences[mo]:
-            print ("  - {}".format(diff))
+            print("  - {}".format(diff))
 
     mos_to_combine = [mo for mo in differences if len(differences[mo]) == 0]
 
-    print ("MOs that can be combined: {}".format(mos_to_combine))
+    print("MOs that can be combined: {}".format(mos_to_combine))
 
     combined_mo = {}
     for mo in mos_to_combine:
-        combined_mo[mo] = combine_mos(
-            mos_by_name[mo[0]],
-            mos_by_name[mo[1]])
+        combined_mo[mo] = combine_mos(mos_by_name[mo[0]], mos_by_name[mo[1]])
         for name in mo:
-            print ('DELETE http://{}/api/sp/managed_objects/{}'.format(
-                LEADER,
-                mos_by_name[name]['id']
-                ))
-        print ('POST http://{}/api/sp/managed_objects << \n{}'.format(
-            LEADER,
-            json.dumps(combined_mo[mo], indent=4)))
+            print(
+                "DELETE http://{}/api/sp/managed_objects/{}".format(
+                    LEADER, mos_by_name[name]["id"]
+                )
+            )
+        print(
+            "POST http://{}/api/sp/managed_objects << \n{}".format(
+                LEADER, json.dumps(combined_mo[mo], indent=4)
+            )
+        )

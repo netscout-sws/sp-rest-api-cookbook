@@ -32,7 +32,7 @@ function makeRequest($url, $key, $body = false, $method = "GET") {
 	// use arbor cert
 	curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, TRUE);
 	curl_setopt($curl, CURLOPT_SSL_VERIFYHOST, 2);
-	curl_setopt($curl, CURLOPT_CAPATH, getcwd() . "/https_active.crt");
+	curl_setopt($curl, CURLOPT_CAPATH, getcwd() . "/certfile");
 
 	// Grab result and close cURL session
 	$result = curl_exec($curl);

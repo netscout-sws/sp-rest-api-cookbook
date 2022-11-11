@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """ Report on number of attacks by CIDR block
 
 This program has some constants defined at the bottom of it that set the SP
@@ -12,11 +12,11 @@ CIDR blocks and a simple table is printed.
 
 """
 
-from __future__ import print_function
 import ipaddress
+import os
 import requests
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 def iso8601_to_datetime(iso8601_string):
@@ -25,14 +25,10 @@ def iso8601_to_datetime(iso8601_string):
     this function does some pretty dumb things to convert that format
     back into a Python datetime object
     """
-    return datetime.strptime(
-        iso8601_string.split('+')[0],
-        '%Y-%m-%dT%H:%M:%S')
+    return datetime.strptime(iso8601_string.split("+")[0], "%Y-%m-%dT%H:%M:%S")
 
 
-def get_attacked_addresses(leader, token, cert,
-                           start, end,
-                           page=1, addrs=[]):
+def get_attacked_addresses(leader, token, cert, start, end, page=1, addrs=[]):
     """Get the `host_address` field from alerts between start and end
 
     Page through the `/alerts/` endpoint and gather up the
@@ -40,42 +36,38 @@ def get_attacked_addresses(leader, token, cert,
     until the last alert in the list started before the `start` time
     """
 
-    url = 'https://{}/api/sp/v2/alerts/?page={}'.format(leader, page)
+    url = "https://{}/api/sp/v10/alerts/?page={}".format(leader, page)
     start_dt = iso8601_to_datetime(start)
     end_dt = iso8601_to_datetime(end)
 
-    r = requests.get(url,
-                     headers={
-                         "X-Arbux-APIToken": token,
-                         "Content-Type": 'application/vnd.json+api'
-                         },
-                     verify=cert)
+    r = requests.get(
+        url,
+        headers={"X-Arbux-APIToken": token, "Content-Type": "application/vnd.json+api"},
+        verify=cert,
+    )
 
     if r.status_code is not requests.codes.ok:
-        print("API request for alerts returned {} ({})".format(
-            r.reason, r.status_code), file=sys.stderr)
+        print(
+            "API request for alerts returned {} ({})".format(r.reason, r.status_code),
+            file=sys.stderr,
+        )
         return None
 
     alerts = r.json()
 
-    for alert in alerts['data']:
-        if 'attributes' in alert and 'subobject' in alert['attributes']:
-            if 'host_address' in alert['attributes']['subobject']:
+    for alert in alerts["data"]:
+        if "attributes" in alert and "subobject" in alert["attributes"]:
+            if "host_address" in alert["attributes"]["subobject"]:
                 alert_time = iso8601_to_datetime(
-                    alerts['data'][-1]['attributes']['start_time']
-                    )
+                    alerts["data"][-1]["attributes"]["start_time"]
+                )
                 if alert_time > start_dt and alert_time < end_dt:
-                    addrs.append(
-                        alert['attributes']['subobject']['host_address']
-                        )
+                    addrs.append(alert["attributes"]["subobject"]["host_address"])
 
-    last_alert = iso8601_to_datetime(
-        alerts['data'][-1]['attributes']['start_time'])
+    last_alert = iso8601_to_datetime(alerts["data"][-1]["attributes"]["start_time"])
     if last_alert > start_dt:
-        print ("paging to page {}; # addresses so far: {}".format(
-            page+1, len(addrs)))
-        get_attacked_addresses(leader, token, cert, start,
-                               end, page+1, addrs)
+        print("paging to page {}; # addresses so far: {}".format(page + 1, len(addrs)))
+        get_attacked_addresses(leader, token, cert, start, end, page + 1, addrs)
 
     return addrs
 
@@ -91,7 +83,7 @@ def bundle_addresses(addrs, netmasks):
     networks = {}
     for addr in addrs:
         addr = ipaddress.ip_address(addr)
-        network = str(addr)+"/"+netmasks[str(addr.version)]
+        network = str(addr) + "/" + netmasks[str(addr.version)]
         network = ipaddress.ip_network(network, strict=False)
         if str(network) in networks:
             networks[str(network)] += 1
@@ -101,32 +93,43 @@ def bundle_addresses(addrs, netmasks):
     return networks
 
 
-if __name__ == '__main__':
-    SPLEADER = 'spleader.example.com'
-    APITOKEN = 'MySecretAPItoken'
-    CERTFILE = './certfile'
+if __name__ == "__main__":
+    #
+    # set the SP leader hostname and API key
+    #
+    if "SP_LEADER" in os.environ:
+        SP_LEADER = os.environ["SP_LEADER"]
+    else:
+        exit('no environment variable "SP_LEADER" found')
 
-    START_DATE = '2018-05-23T12:00:00+00:00'
-    END_DATE = '2018-05-23T23:00:00+00:00'
+    if "SP_API_KEY" in os.environ:
+        API_KEY = os.environ["SP_API_KEY"]
+    else:
+        exit('no environment variable "SP_API_KEY" found')
+    CERTFILE = "./certfile"
 
-    IPv4_MASK = '24'
-    IPv6_MASK = '116'
+    date_format = "%Y-%m-%dT%H:%M:%S+00:00"
+    end = datetime.now()
+    start = end - timedelta(hours=12)
+    END_DATE = end.strftime(date_format)
+    START_DATE = start.strftime(date_format)
 
-    addresses = get_attacked_addresses(SPLEADER,
-                                       APITOKEN,
-                                       CERTFILE,
-                                       START_DATE,
-                                       END_DATE)
-    print ("# addresses found between {} and {}: {}".format(
-        START_DATE,
-        END_DATE,
-        len(addresses)))
+    IPv4_MASK = "24"
+    IPv6_MASK = "116"
 
-    cidrs = bundle_addresses(addresses, {'4': IPv4_MASK,
-                                         '6': IPv6_MASK})
+    addresses = get_attacked_addresses(
+        SP_LEADER, API_KEY, CERTFILE, START_DATE, END_DATE
+    )
+    print(
+        "# addresses found between {} and {}: {}".format(
+            START_DATE, END_DATE, len(addresses)
+        )
+    )
 
-    print("{:>25}-+-{}".format("-"*25, "---------"))
+    cidrs = bundle_addresses(addresses, {"4": IPv4_MASK, "6": IPv6_MASK})
+
+    print("{:>25}-+-{}".format("-" * 25, "---------"))
     print("{:>25} | {}".format("Subnet", "# Attacks"))
-    print("{:>25}-+-{}".format("-"*25, "---------"))
+    print("{:>25}-+-{}".format("-" * 25, "---------"))
     for cidr in sorted(cidrs):
         print("{:>25} | {:>8}".format(cidr, cidrs[cidr]))

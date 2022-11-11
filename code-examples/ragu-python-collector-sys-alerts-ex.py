@@ -1,17 +1,21 @@
+#!/usr/bin/env python3
 """Example SP API script to retrieve and summarize device system alerts."""
-from __future__ import print_function
-import arrow     # version: 0.10.0
+import os
 import sys
 import re
-import requests  # version: 2.18.4
-import urllib    # version: 1.17
+import requests
+import urllib
+try:
+    import arrow  # version: 1.2.3
+except ImportError:
+    exit('module arrow not found, install with: "pip install arrow"')
 
-CERT_FILE = './https_active.crt'
+CERT_FILE = "./certfile"
 
 
 def get_page_from_link(link):
     """Extract a page number from an API link."""
-    match = re.search(r'page=(\d+)', link)
+    match = re.search(r"page=(\d+)", link)
     return int(match.group(1)) if match else None
 
 
@@ -33,30 +37,23 @@ def api_request(url, key, body=None):
         dict: 'meta' keyvalue of a requests.Response object.
         dict: 'links' keyvalue of a requests.Response object.
     """
-    headers = {'X-Arbux-APIToken': key,
-               'Content-Type': 'application/vnd.api+json'}
+    headers = {"X-Arbux-APIToken": key, "Content-Type": "application/vnd.api+json"}
     if body is None:
-        api_response = requests.get(
-            url,
-            headers=headers,
-            verify=CERT_FILE)
+        api_response = requests.get(url, headers=headers, verify=CERT_FILE)
     else:
-        api_response = requests.post(
-            url,
-            data=body,
-            headers=headers,
-            verify=CERT_FILE)
+        api_response = requests.post(url, data=body, headers=headers, verify=CERT_FILE)
 
     # Handle any API error responses.
-    if (api_response.status_code != requests.codes.ok):
-        print("API responded with this error: \n{}".format(
-            api_response.text),
-            file=sys.stderr)
+    if api_response.status_code != requests.codes.ok:
+        print(
+            "API responded with this error: \n{}".format(api_response.text),
+            file=sys.stderr,
+        )
         return ([], {}, {})
 
     # Convert the response to JSON and return it
     api_response = api_response.json()
-    return (api_response['data'], api_response['meta'], api_response['links'])
+    return (api_response["data"], api_response["meta"], api_response["links"])
 
 
 def get_alerts(leader, key, start_time):
@@ -82,11 +79,11 @@ def get_alerts(leader, key, start_time):
     current_page_number = get_page_from_link(links["self"])
 
     # Get all remaining pages, add the data
-    while (current_page_number != last_page_number):
+    while current_page_number != last_page_number:
         current_page_number = current_page_number + 1
-        (current_page, meta, links) = get_alerts_page(leader, key,
-                                                      start_time,
-                                                      current_page_number)
+        (current_page, meta, links) = get_alerts_page(
+            leader, key, start_time, current_page_number
+        )
         alerts.extend(current_page)
 
     return alerts
@@ -106,13 +103,16 @@ def get_alerts_page(leader, key, start_time, page=1):
         list: A specific page of alerts from the leader.
     """
     # Craft the URL components. Filter on alert class and starting time.
-    alert_uri = '/api/sp/v3/alerts/'
-    filter_value = ("/data/attributes/alert_class = system AND "
-                    "/data/attributes/start_time > {0}".format(
-                        start_time.format('YYYY-MM-DD:HH:mm:ss')))
+    alert_uri = "/api/sp/v10/alerts/"
+    filter_value = (
+        "/data/attributes/alert_class = system AND "
+        "/data/attributes/start_time > {0}".format(
+            start_time.format("YYYY-MM-DD:HH:mm:ss")
+        )
+    )
 
     # Percent-encode our filter query.
-    filter_value = urllib.quote(filter_value, safe='')
+    filter_value = urllib.parse.quote(filter_value, safe="")
 
     # Add the parameters to the request url.
     params = list()
@@ -136,7 +136,7 @@ def get_devices(leader, key):
     Returns:
         list: Device data from the leader.
     """
-    device_uri = '/api/sp/v3/devices/'
+    device_uri = "/api/sp/v10/devices/"
 
     url = "https://{0}{1}".format(leader, device_uri)
 
@@ -147,8 +147,18 @@ def get_devices(leader, key):
 
 def main():
     """Print a list of devices sorted by system alert count."""
-    SP_LEADER = 'leader.example.com'
-    API_KEY = 'jrqRzJBV5Ua4t88YWuoTJ8TJsnHBe4qR1phcCvcD'
+    #
+    # set the SP leader hostname and API key
+    #
+    if "SP_LEADER" in os.environ:
+        SP_LEADER = os.environ["SP_LEADER"]
+    else:
+        exit('no environment variable "SP_LEADER" found')
+
+    if "SP_API_KEY" in os.environ:
+        API_KEY = os.environ["SP_API_KEY"]
+    else:
+        exit('no environment variable "SP_API_KEY" found')
 
     # Create a start date one week before the current time.
     arrow_now = arrow.utcnow()
@@ -175,39 +185,44 @@ def main():
             continue
 
         alert_counts[device_id] = (
-            alert_counts[device_id] + 1 if device_id in alert_counts else 1)
+            alert_counts[device_id] + 1 if device_id in alert_counts else 1
+        )
 
     # Transform the dict into list of dicts containing id
     # and alert_count for each device.
-    alert_count_list = [{"id": key, "alert_count": value}
-                        for key, value in alert_counts.iteritems()]
+    alert_count_list = [
+        {"id": key, "alert_count": value} for key, value in alert_counts.items()
+    ]
 
     # Sort the list in decending order by alert count.
-    alert_count_list.sort(reverse=True,
-                          cmp=lambda x, y: cmp(x["alert_count"],
-                                               y["alert_count"]))
+    alert_count_list.sort(reverse=True, key=lambda x: x["alert_count"])
 
     # Display a report of collectors sorted by the number of system alerts
     # found on each collector.
     header_format_string = (
-        "==== {alert_count:=<24} {name:=<20} "
-        "{device_type:=<20} {ip_address:=<20}")
+        "==== {alert_count:=<24} {name:=<20} " "{device_type:=<20} {ip_address:=<20}"
+    )
 
     # Display a header.
-    print(header_format_string.format(alert_count="System Alert Count ",
-                                      name="Device Name ",
-                                      device_type="Device Type ",
-                                      ip_address="IP Address "))
+    print(
+        header_format_string.format(
+            alert_count="System Alert Count ",
+            name="Device Name ",
+            device_type="Device Type ",
+            ip_address="IP Address ",
+        )
+    )
 
     format_string = (
-        "     {alert_count:<24} {name:20} "
-        "{device_type:20} {ip_address:20}")
+        "     {alert_count:<24} {name:20} " "{device_type:20} {ip_address:20}"
+    )
 
     # Display a row for each device with alerts.
     for device in alert_count_list:
         # Roll in our previously retrieved device data.
         device.update(device_dict[device["id"]])
         print(format_string.format(**device))
+
 
 if __name__ == "__main__":
     main()

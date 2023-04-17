@@ -25,11 +25,8 @@ public class SystemEventClient {
     // information
     private static String alignFormat = "| %-4s | %-10s | %-20s | %-6s | %-7s | %-24s | %-24s | %-11s |%n";
 
-    // Key to access the SP Leader
-    private static String token = "bufFhFCg4f01z4iwLtvhtqhhHetVJlwyXdzlJeVl";
-
     /** Get annotation for given alert if it has one. */
-    private static String get_annotation(JSONObject obj) throws Exception{
+    private static String get_annotation(JSONObject obj, String apiKey) throws Exception{
         // If the given alert has relationships
         JSONObject relationships = (JSONObject) obj.get("relationships");
         if(relationships != null) {
@@ -42,7 +39,7 @@ public class SystemEventClient {
                     annotation_relationship.get("links"))).get("related");
 
                 // Query the related annotation's link
-                JSONObject response = convert_to_json(request(link));
+                JSONObject response = convert_to_json(request(link, apiKey));
                 JSONObject temp = (JSONObject) (
                     (JSONArray) response.get("data")).get(0);
 
@@ -56,7 +53,7 @@ public class SystemEventClient {
     }
 
     /** Parse JSON and print it according to how the UI presents it. */
-    private static void print_ui(JSONObject json) throws Exception {
+    private static void print_ui(JSONObject json, String apiKey) throws Exception {
         // For each object in the array of results
         for (Object raw_json : (JSONArray) json.get("data")) {
             JSONObject obj = (JSONObject) raw_json;
@@ -89,7 +86,7 @@ public class SystemEventClient {
                     subobject.get("version"),
                     attributes.get("start_time"),
                     stop_time,
-                    get_annotation(obj));
+                    get_annotation(obj, apiKey));
             }
         }
     }
@@ -129,7 +126,7 @@ public class SystemEventClient {
     }
 
     /** Set up Https Connection with given SSL Certificate. */
-    private static HttpsURLConnection request(String httpUrl) throws Exception {
+    private static HttpsURLConnection request(String httpUrl, String apiKey) throws Exception {
         // Pass certificate to connection
         InputStream trustStream = new FileInputStream("./cacerts.jks");
         char[] password = null;
@@ -155,7 +152,7 @@ public class SystemEventClient {
                 (HttpsURLConnection) url.openConnection());
 
             // Pass API Token and type to accept to the connection
-            con.setRequestProperty("X-Arbux-APIToken", token);
+            con.setRequestProperty("X-Arbux-APIToken", apiKey);
             con.setRequestProperty("Accept", "application/json");
 
             // Return connection
@@ -171,8 +168,21 @@ public class SystemEventClient {
 
     /** Main: Trigger request for every page. */
     public static void main(String[] args) throws Exception {
+	String leader = System.getenv("SP_LEADER");
+	String apiKey = System.getenv("SP_API_KEY");
+
+	if (leader == null) {
+		System.out.println("no environment variable 'SP_LEADER' found");
+		System.exit(0);
+	}
+	if (apiKey == null) {
+		System.out.println("no environment variable 'SP_API_KEY' found");
+		System.exit(0);
+	}
+
         // Url to hit
-        String httpUrl = "https://leader.example.com/api/sp/alerts/";
+	String httpUrl = String.format("https://%s/api/sp/alerts/", leader);
+	System.out.println(httpUrl);
 
         // Print table headers
         System.out.format("+-------+------------+-----------------------------+--------+---------+---------------------------+---------------------------+-------------+%n");
@@ -184,7 +194,7 @@ public class SystemEventClient {
         JSONObject json;
         while (httpUrl !=  null) {
             // Make the query to the API with the given url
-            connection = request(httpUrl);
+            connection = request(httpUrl, apiKey);
 
             // Convert the response from the API into json
             json = convert_to_json(connection);
@@ -195,7 +205,7 @@ public class SystemEventClient {
             }
 
             // Print the results formatted in table format
-            print_ui(json);
+            print_ui(json, apiKey);
 
             // Get `next` link if there is one in the pagination links (there
             // are more results)
